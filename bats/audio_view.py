@@ -1,51 +1,65 @@
+import copy
+
 import soundfile as sf
 import numpy as np
 import scipy.signal
 
+from .display import display_audio
+from .display import display_table
+from .time_span import TimeSpan
+
 
 class AudioView:
-    def __init__(self, sample_rate, duration, n_channels, path, start_frame=None, end_frame=None, data=None):
+    def __init__(self, sample_rate, duration, n_channels, path, time_span=None, data=None):
         self.sample_rate = sample_rate
         self.duration = duration
         self.n_channels = n_channels
         self._path = path
-        self._start_frame = start_frame
-        self._end_frame = end_frame
+        if time_span is None:
+            time_span = TimeSpan(
+                start_frame=0, 
+                n_frames=self.second_to_frame(self.duration), 
+                total_n_frames=self.second_to_frame(self.duration),
+            )
+        else:
+            time_span = copy.deepcopy(time_span)
+        self._time_span = time_span
         self._data = data
         if self._path is None and self._data is None:
             raise RuntimeError('Invalid AudioView that has no file path or data!')
             
     def start_time(self):
-        if self._start_frame is None:
-            return 0.0
-        return self.frame_to_second(self._start_frame)
+        return self.frame_to_second(self._time_span.absolute_start_frame)
     
     def end_time(self):
-        if self._end_frame is None:
-            return self.duration + self.start_time()
-        return self.frame_to_second(self._end_frame)
+        return self.frame_to_second(self._time_span.absolute_end_frame)
         
     def _view_from_slice(self, arg):
         if arg.step:
             raise RuntimeError('Downsampling with slice steps not supported!')
-        # TODO: propogate self.data if we have already loaded
+
         start_time = arg.start
         end_time = arg.stop
-        if start_time is None:
-            start_time = 0.0
-        if end_time is None:
-            end_time = self.duration
-        duration = end_time - start_time
-        duration = self.frame_to_second(self.second_to_frame(duration))
+        time_span = self._time_span.from_relative_slice(
+            start_frame=self.second_to_frame(start_time),
+            end_frame=self.second_to_frame(end_time),
+        )
+        duration = self.frame_to_second(time_span.n_frames)
         if duration <= 0:
             raise RuntimeError(f'Invalid view start: {start_time} end: {end_time}')
+
+        # Propogate cached data
+        data = None
+        if self._data is not None:
+            data = self._data[time_span.relative_start_frame:time_span.relative_end_frame, :]
+        
         return AudioView(
             sample_rate=self.sample_rate,
             duration=duration,
             n_channels=self.n_channels,
             path=self._path,
-            start_frame=self.second_to_frame(start_time),
-            end_frame=self.second_to_frame(end_time),
+            data=data,
+            time_span=time_span,
         )
     
     def second_to_frame(self, second):
@@ -61,7 +75,7 @@ class AudioView:
     def __getitem__(self, arg):
         if isinstance(arg, slice):
             return self._view_from_slice(arg)
-        raise
+        raise RuntimeError('Invalid get item!')
         
     def mean(self):
         return self.data().mean()
@@ -84,14 +98,16 @@ class AudioView:
                 raise RuntimeError('Invalid AudioView that has no file path or data!')
             self._data, _ = sf.read(
                 self._path, 
-                start=self._start_frame, 
-                stop=self._end_frame,
+                start=self._time_span.absolute_start_frame, 
+                stop=self._time_span.absolute_end_frame,
                 always_2d=True,
                 dtype='float32',
             )
         return self._data
     
     def _plot_time_series(self, data, n_points, use_downsample, y_axis_name):
+        # Lazily import matplotlib
+        import matplotlib.pyplot as plt
         downsample_factor = data.shape[0] // n_points
         for channel in range(data.shape[1]):
             plot_data = data[:, channel]
@@ -156,8 +172,7 @@ class AudioView:
         return self.from_data(
             data=data,
             sample_rate=self.sample_rate,
-            start_frame=self._start_frame,
-            end_frame=self._end_frame,
+            time_span=self._time_span,
         )
         
     def __add__(self, value):
@@ -183,7 +198,7 @@ class AudioView:
         )
     
     @classmethod
-    def from_data(cls, data, sample_rate, start_frame=None, end_frame=None):
+    def from_data(cls, data, sample_rate, time_span=None):
         if len(data.shape) == 1:
             data = np.expand_dims(data, axis=-1)
         if len(data.shape) != 2:
@@ -197,6 +212,5 @@ class AudioView:
             n_channels=n_channels,
             path=None,
             data=data,
-            start_frame=start_frame,
-            end_frame=end_frame,
+            time_span=time_span,
         )

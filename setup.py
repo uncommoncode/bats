@@ -3,7 +3,7 @@ from setuptools import find_packages
 
 setup(
     name='bats',
-    version='0.0.1',
+    version='0.0.2',
     packages=find_packages(),
     author='Emmett McQuinn',
     license='LICENSE.txt',
@@ -17,5 +17,6 @@ setup(
         'scipy >= 1.4.1',
         'matplotlib >= 3.0.0',
         'SoundFile >= 0.10.0',
+        'jupyter >= 1.0.0',
     ],
 )
