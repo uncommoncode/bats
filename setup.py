@@ -16,5 +16,6 @@ setup(
         'numpy >= 1.17.0',
         'scipy >= 1.4.1',
         'matplotlib >= 3.0.0',
+        'SoundFile >= 0.10.0',
     ],
 )
