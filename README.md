@@ -24,4 +24,7 @@ av[3.5:7.0].display()
 
 # Scale the signal and display the audio player.
 (av * 0.5).display()
+
+# Get a numpy array of the data with channels last.
+array = av[3.5:3.6].data()
 ```
